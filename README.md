@@ -36,19 +36,16 @@ interval:                         # holds function in loop
   - interval: 200ms
     then:                          # setup write calls from Modbus TCP Server
       - lambda: |- 
-              static bool initialized = false;
+             static bool initialized = false;
               if (!initialized) {
-                // Callback for write action set
-                id(tcp).setWriteCallback([](uint8_t unit, uint8_t function, uint16_t address, uint16_t value) -> bool {
-                  
+                 // Callback for write action set
+                 id(tcp).setWriteCallback([](uint8_t unit, uint8_t function, uint16_t address, uint16_t value) -> bool {
                   // === safety check at beginning ===
                   if (id(phy_connected) != 1 || id(tcp_server_cmd) != 0) {
                     ESP_LOGW("modbus", "Write rejected: phy=%d tcp_server=%d", id(phy_connected), id(tcp_server_cmd));
                     return false;  // write cancled
                   }
-                  
                   ESP_LOGI("modbus", "Write callback: unit=%d func=%d addr=0x%x value=%d", unit, function, address, value);
-                  
                   // Unit 1
                   if (unit == 1) {
                     // Coils (Write Single Coil - Function 5)
@@ -58,7 +55,6 @@ interval:                         # holds function in loop
                         return true;
                       }
                     }
-
                     // Holding Registers (Write Single/Multiple Register - Function 6/16)                
                     if (function == 6 || function == 16) {
                       // Relay 1
@@ -68,11 +64,9 @@ interval:                         # holds function in loop
                       }
                     }
                   }
-                
                   ESP_LOGW("modbus", "Write to unknown address: unit=%d addr=0x%x", unit, address);
                   return false; // Adress not available
                 });
-                
                 initialized = true;
                 ESP_LOGI("modbus", "Modbus server initialized with write support");
               }
