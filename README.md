@@ -1,10 +1,22 @@
-# stream_server
+```yaml
+# ESPHome Modbus TCP Server Example Configuration
+# Minimal example with one relay control
 
-stream_server:              # start Modbus TCP Server on port 502
-  id: tcp
-  port: 502
+esphome:
+  name: modbus-tcp-example
+  platform: ESP32
+  board: esp32dev
 
+# External components
+external_components:
+  - source: github://tabs2121/stream_server
+### or
+  - source:       #internal Modbus TCP Component write and read
+      type: local
+      path: components 
+    components: [ stream_server ]
 
+# Ethernet configuration
 ethernet:                     # start ethernet if needed
   type: LAN8720
   phy_addr: 1
@@ -14,8 +26,13 @@ ethernet:                     # start ethernet if needed
   power_pin: 5
   id: eth1
 
+# Modbus TCP Server
+stream_server:              # start Modbus TCP Server on port 502
+  id: tcp
+  port: 502
 
-global:                        # set globals for data type
+# Global variables
+globals:                        # set globals for data type
   - id: tcp_server_cmd         # tcp_server_cmd only needs if you want to close the Server by hand 
     type: uint16_t
     restore_value: yes
@@ -24,14 +41,31 @@ global:                        # set globals for data type
   - id: phy_connected
     type: uint16_t
     restore_value: no
-    initial_value: 'false'
+    initial_value: '0'
     
   - id: relay1_cmd
     type: uint16_t
     restore_value: yes
     initial_value: '0'
 
+# Switch for Home Assistant control (optional)
+switch:
+  - platform: template
+    name: "Relay 1"
+    id: relay1_switch
+    optimistic: false
+    turn_on_action:
+      - globals.set:
+          id: relay1_cmd
+          value: '1'
+    turn_off_action:
+      - globals.set:
+          id: relay1_cmd
+          value: '0'
+    lambda: |-
+      return id(relay1_cmd) == 1;
 
+# Interval loops
 interval:                         # holds function in loop
   - interval: 200ms
     then:                          # setup write calls from Modbus TCP Server
@@ -43,7 +77,7 @@ interval:                         # holds function in loop
                   // === safety check at beginning ===
                   if (id(phy_connected) != 1 || id(tcp_server_cmd) != 0) {
                     ESP_LOGW("modbus", "Write rejected: phy=%d tcp_server=%d", id(phy_connected), id(tcp_server_cmd));
-                    return false;  // write cancled
+                    return false;  // write cancelled
                   }
                   ESP_LOGI("modbus", "Write callback: unit=%d func=%d addr=0x%x value=%d", unit, function, address, value);
                   // Unit 1
@@ -65,21 +99,20 @@ interval:                         # holds function in loop
                     }
                   }
                   ESP_LOGW("modbus", "Write to unknown address: unit=%d addr=0x%x", unit, address);
-                  return false; // Adress not available
+                  return false; // Address not available
                 });
                 initialized = true;
                 ESP_LOGI("modbus", "Modbus server initialized with write support");
               }
-
-
+              
   - interval: 300ms
     then:                            # checks connection before setting register for read from Modbus TCP Server
       - lambda: |-
           if (id(phy_connected) == 1 && id(tcp_server_cmd) == 0) {
             id(tcp).setRegisterUint16(1, 3, 101, id(relay1_cmd), 0);
-            }
+          }
         
- - interval: 10s
+  - interval: 10s
     then:                              # checks Network Connection is available
       - lambda: |-
           bool is_connected = id(eth1).is_connected();
@@ -90,8 +123,7 @@ interval:                         # holds function in loop
           else if (!is_connected && id(phy_connected) == 1) {
             id(phy_connected) = 0;
           }
-
-
+          
   - interval: 10s
     then:                            # checks Network Connection is available and TCP Server is not deactivated
       - lambda: |-
