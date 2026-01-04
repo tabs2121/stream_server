@@ -49,6 +49,11 @@ public:
     using WriteCallback = std::function<bool(uint8_t unit, uint8_t function, uint16_t address, uint16_t value)>;
     void setWriteCallback(WriteCallback callback) { this->write_callback_ = callback; }
 
+    // Server enable/disable
+    void enable_server() { this->server_enabled_ = true; }
+    void disable_server() { this->server_enabled_ = false; }
+    bool is_server_enabled() { return this->server_enabled_; }
+
 protected:
     void accept();
     void cleanup();
@@ -92,6 +97,7 @@ protected:
     uint16_t port_{ 502 };
     uint32_t max_inactivity_time = 5 * 60 * 1000;
     bool notcpdelay = 1;
+    bool server_enabled_{ true };
     std::vector<Client> clients_{};
     std::map<UnitFunctionAddress, ValueAge> registers_{};
     WriteCallback write_callback_{ nullptr };

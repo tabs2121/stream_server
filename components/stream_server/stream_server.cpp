@@ -55,6 +55,19 @@ void StreamServerComponent::setup() {
 }
 
 void StreamServerComponent::loop() {
+    // === NEU: Wenn Server disabled, alle Clients trennen und beenden ===
+    if (!this->server_enabled_) {
+        if (!this->clients_.empty()) {
+            ESP_LOGW(TAG, "Server disabled - disconnecting %d client(s)", this->clients_.size());
+            for (Client& client : this->clients_) {
+                client.disconnected = true;
+            }
+            this->cleanup();
+        }
+        return;  // Loop nicht ausführen wenn disabled
+    }
+
+    // === Original Loop ===
     this->accept();
     this->read();
     this->write();
@@ -62,6 +75,12 @@ void StreamServerComponent::loop() {
 }
 
 void StreamServerComponent::accept() {
+    // === NEU: Keine neuen Verbindungen akzeptieren wenn disabled ===
+    if (!this->server_enabled_) {
+        return;
+    }
+
+    // === Original Accept Code ===
     struct sockaddr_in client_addr;
     socklen_t client_addrlen = sizeof(struct sockaddr_in);
     std::unique_ptr<socket::Socket> socket = this->socket_->accept(reinterpret_cast<struct sockaddr*>(&client_addr), &client_addrlen);
@@ -235,13 +254,12 @@ void StreamServerComponent::write() {
 
             // Coil-Wert normalisieren (0x0000 = OFF, 0xFF00 = ON)
             if (value != 0x0000 && value != 0xFF00) {
-                error = 3; // Ungültiger Wert
+                error = 3;
             }
             else {
-                // Als Register speichern (0 oder 1)
                 uint16_t normalized_value = (value == 0xFF00) ? 1 : 0;
                 if (!setRegister(unit, 1, address, normalized_value)) {
-                    error = 2; // Adresse nicht verfügbar
+                    error = 2;
                 }
             }
 
@@ -252,7 +270,6 @@ void StreamServerComponent::write() {
             response[3] = client.buffer[3];
 
             if (error == 0) {
-                // Erfolg: Echo der Anfrage
                 response[4] = 0;
                 response[5] = 6;
                 response[6] = unit;
@@ -283,7 +300,7 @@ void StreamServerComponent::write() {
                 transaction, unit, address, value);
 
             if (!setRegister(unit, 6, address, value)) {
-                error = 2; // Adresse nicht verfügbar
+                error = 2;
             }
 
             uint8_t response[12];
@@ -293,7 +310,6 @@ void StreamServerComponent::write() {
             response[3] = client.buffer[3];
 
             if (error == 0) {
-                // Erfolg: Echo der Anfrage
                 response[4] = 0;
                 response[5] = 6;
                 response[6] = unit;
@@ -379,7 +395,7 @@ void StreamServerComponent::write() {
             response[5] = 3;
             response[6] = unit;
             response[7] = function | 0x80;
-            response[8] = 1; // Illegal function
+            response[8] = 1;
             client.socket->write(response, 9);
         }
 
@@ -388,12 +404,10 @@ void StreamServerComponent::write() {
 }
 
 bool StreamServerComponent::setRegister(uint8_t unit, uint8_t function, uint16_t address, uint16_t value) {
-    // Callback aufrufen, wenn vorhanden
     if (this->write_callback_) {
         return this->write_callback_(unit, function, address, value);
     }
 
-    // Alternativ: Direkt in Register schreiben (für einfache Implementierung)
     registers_[{unit, function, address}] = { value, 0 };
     ESP_LOGD(TAG, "Register set: unit=%d func=%d addr=0x%x value=%d", unit, function, address, value);
     return true;
